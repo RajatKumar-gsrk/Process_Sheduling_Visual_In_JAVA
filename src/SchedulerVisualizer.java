@@ -9,10 +9,11 @@ import javax.swing.table.DefaultTableModel;
 public class SchedulerVisualizer extends JFrame {
 
     private List<Process> processList;
+    private List<Process> currentTimeLine;
     private DefaultTableModel tableModel; // Keep this to update the table
     private JLabel statsLabel;
 
-    public SchedulerVisualizer() {
+    private SchedulerVisualizer() {
         setTitle("OS Process Scheduler Visualizer");
         setSize(900, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -21,17 +22,17 @@ public class SchedulerVisualizer extends JFrame {
         // 1. Data Setup
         processList = new ArrayList<>(Arrays.asList(
                 new Process("P1", 0, 8),
-                new Process("P2", 1, 2),
+                new Process("P2", 1, 4),
                 new Process("P3", 2, 1)
         ));//Arrays.aslist returns fixed size list can't add or remove so we wrap it
-        calculateSJF(processList);
+        calculateFCFS(processList);
 
         // 2. Gantt Chart Panel (Top)
         JPanel ganttPanel = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                drawGanttChart(g, processList); // Pass the list here
+                drawGanttChart(g, currentTimeLine); // Pass the list here
             }
         };
         ganttPanel.setPreferredSize(new Dimension(900, 150));
@@ -83,7 +84,7 @@ public class SchedulerVisualizer extends JFrame {
         panel.add(clearButton);
 
         // Inside your createInputPanel() or as a class member
-        String[] algorithms = {"FCFS", "SJF (Non-Preemptive)"};
+        String[] algorithms = {"FCFS", "SJF (Non-Preemptive)", "SRTF"};
         JComboBox<String> algoSelector = new JComboBox<>(algorithms);
 
         panel.add(algoSelector);
@@ -95,6 +96,8 @@ public class SchedulerVisualizer extends JFrame {
                 calculateFCFS(processList);
             } else if("SJF (Non-Preemptive)".equals(selected)) {
                 calculateSJF(processList);
+            } else if("SRTF".equals(selected)) {
+                calculateSRTF(processList);
             }
             refreshUI();
         });
@@ -115,7 +118,9 @@ public class SchedulerVisualizer extends JFrame {
                     calculateFCFS(processList);
                 } else if("SJF (Non-Preemptive)".equals(selected)) {
                     calculateSJF(processList);
-                }
+                } else if("SRTF".equals(selected)) {
+                    calculateSRTF(processList);
+                };
 
                 // 3. Update the Table and Gantt Chart
                 refreshUI();
@@ -127,6 +132,12 @@ public class SchedulerVisualizer extends JFrame {
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(this, "Please enter valid numbers for Time.");
             }
+        });
+
+        clearButton.addActionListener(e -> {
+           processList.clear();
+           currentTimeLine.clear();
+           refreshUI();
         });
 
         return panel;
@@ -182,12 +193,13 @@ public class SchedulerVisualizer extends JFrame {
         repaint();
     }
 
-    public void calculateFCFS(List<Process> processes) {
+    private void calculateFCFS(List<Process> processes) {
         // 1. Sort processes by arrival time
-        processes.sort(Comparator.comparingInt(p -> p.arrivalTime));
+        currentTimeLine = new ArrayList<>(processes);
+        currentTimeLine.sort(Comparator.comparingInt(p -> p.arrivalTime));
 
         int currentTime = 0;
-        for (Process p : processes) {
+        for (Process p : currentTimeLine) {
             // If the CPU is idle because the process hasn't arrived yet
             if (currentTime < p.arrivalTime) {
                 currentTime = p.arrivalTime;
@@ -205,16 +217,25 @@ public class SchedulerVisualizer extends JFrame {
 
             // Move the clock forward
             currentTime = p.completionTime;
+
+            for(Process pp : processes) {
+                if (pp.pid.equals(p.pid)) {
+                    pp.completionTime = p.completionTime;
+                    pp.turnAroundTime = p.turnAroundTime;
+                    pp.waitingTime = p.waitingTime;
+                }
+            }
         }
     }
 
-    public void calculateSJF(List<Process> processes) {
+    private void calculateSJF(List<Process> processes) {
         int n = processes.size();
         if (n == 0) return;
         List<Process> sortedProcesses = new ArrayList<>();
+        currentTimeLine = new ArrayList<>(processes);
 
         // Reset all processes first
-        for(Process p : processes) p.completionTime = 0;
+        for(Process p : currentTimeLine) p.completionTime = 0;
 
         int currentTime = 0;
         int completed = 0;
@@ -226,7 +247,7 @@ public class SchedulerVisualizer extends JFrame {
 
             // Find the process that has arrived and has the shortest burst time
             for (int i = 0; i < n; i++) {
-                Process p = processes.get(i);
+                Process p = currentTimeLine.get(i);
                 if (p.arrivalTime <= currentTime && !isCompleted[i]) {
                     if (p.burstTime < minBurst) {
                         minBurst = p.burstTime;
@@ -234,7 +255,7 @@ public class SchedulerVisualizer extends JFrame {
                     }
                     // If burst times are equal, pick the one that arrived first (FCFS tie-break)
                     else if (p.burstTime == minBurst) {
-                        if (p.arrivalTime < processes.get(idx).arrivalTime) {
+                        if (p.arrivalTime < currentTimeLine.get(idx).arrivalTime) {
                             idx = i;
                         }
                     }
@@ -242,7 +263,7 @@ public class SchedulerVisualizer extends JFrame {
             }
 
             if (idx != -1) {
-                Process p = processes.get(idx);
+                Process p = processList.get(idx);
                 p.completionTime = currentTime + p.burstTime;
                 p.turnAroundTime = p.completionTime - p.arrivalTime;
                 p.waitingTime = p.turnAroundTime - p.burstTime;
@@ -257,8 +278,82 @@ public class SchedulerVisualizer extends JFrame {
             }
         }
 
-        processList.clear();
-        processList = sortedProcesses;
+        currentTimeLine.clear();
+        currentTimeLine = sortedProcesses;
+    }
+
+    public void calculateSRTF(List<Process> processes) {
+        List<GanttBlock> timeline = new ArrayList<>();
+        int n = processes.size();
+        int currentTime = 0;
+        int completed = 0;
+        String lastPid = "";
+        int blockStart = 0;
+        currentTimeLine = new ArrayList<>(processes);
+
+        // We must work on copies because we will be subtracting from remainingTime
+        for (Process p : currentTimeLine) {
+            p.remainingTime = p.burstTime;
+        }
+
+        while (completed != n) {
+            int idx = -1;
+            int minRemaining = Integer.MAX_VALUE;
+
+            for (int i = 0; i < n; i++) {
+                Process p = currentTimeLine.get(i);
+                if (p.arrivalTime <= currentTime && p.remainingTime > 0) {
+                    if (p.remainingTime < minRemaining) {
+                        minRemaining = p.remainingTime;
+                        idx = i;
+                    }
+                }
+            }
+
+            if (idx != -1) {
+                Process p = currentTimeLine.get(idx);
+
+                // Check for Context Switch: Did a new process take over?
+                if (!p.pid.equals(lastPid)) {
+                    if (!lastPid.equals("")) {
+                        timeline.add(new GanttBlock(lastPid, blockStart, currentTime));
+                    }
+                    blockStart = currentTime;
+                    lastPid = p.pid;
+                }
+
+                p.remainingTime--;
+                currentTime++;
+
+                if (p.remainingTime == 0) {
+                    processList.get(idx).completionTime = currentTime;
+                    processList.get(idx).turnAroundTime = p.completionTime - p.arrivalTime;
+                    processList.get(idx).waitingTime = p.turnAroundTime - p.burstTime;
+                    completed++;
+
+                    // Add block to timeline when process finishes
+                    timeline.add(new GanttBlock(p.pid, blockStart, currentTime));
+                    lastPid = ""; // Reset for next potential process
+                }
+            } else {
+                // CPU is Idle
+                if (!lastPid.equals("Idle")) {
+                    if (!lastPid.equals("")) {
+                        timeline.add(new GanttBlock(lastPid, blockStart, currentTime));
+                    }
+                    blockStart = currentTime;
+                    lastPid = "Idle";
+                }
+                currentTime++;
+            }
+        }
+        currentTimeLine.clear();
+        for(GanttBlock g : timeline) {
+            if(!g.pid.equals("Idle")) {
+                currentTimeLine.add(new Process(g.pid, g.startTime, g.endTime - g.startTime));
+                currentTimeLine.get(currentTimeLine.size() - 1).completionTime = g.endTime;
+            }
+        }
     }
 
     private String calculateStats(List<Process> processes) {
