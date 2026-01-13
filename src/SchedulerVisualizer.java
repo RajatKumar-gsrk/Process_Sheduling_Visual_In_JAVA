@@ -279,5 +279,6 @@ public class SchedulerVisualizer extends JFrame {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new SchedulerVisualizer().setVisible(true));
+        //lost commits due to email conflicts
     }
 }
