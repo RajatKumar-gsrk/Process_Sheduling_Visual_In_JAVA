@@ -179,14 +179,15 @@ public class SchedulerVisualizer extends JFrame {
         int x = 50; // Starting X-coordinate
         int y = 50; // Starting Y-coordinate
         int height = 50;
-        int scale = 40; // 1 second = 40 pixels
-
+        int totalTime = processes.get(processes.size()-1).completionTime;
+        int availableWidth = getWidth() - 100;
+        double scale = (double)availableWidth / totalTime;
         int currentTime = 0;
 
         for (Process p : processes) {
             // Handle Idle Time visually
             if (p.arrivalTime > currentTime) {
-                int idleWidth = (p.arrivalTime - currentTime) * scale;
+                int idleWidth = (int)((p.arrivalTime - currentTime) * scale);
                 g.setColor(Color.LIGHT_GRAY);
                 g.drawRect(x, y, idleWidth, height);
                 g.drawString("Idle", x + 5, y + 30);
@@ -195,8 +196,8 @@ public class SchedulerVisualizer extends JFrame {
             }
 
             // Draw Process block
-            int width = p.burstTime * scale;
-            g.setColor(Color.CYAN);
+            int width = (int)(p.burstTime * scale);
+            g.setColor(new Color((Math.abs(p.pid.hashCode() * p.pid.hashCode()) % 255), (Math.abs(p.pid.hashCode() * p.pid.hashCode()) % 255), 220));
             g.fillRect(x, y, width, height);
             g.setColor(Color.BLACK);
             g.drawRect(x, y, width, height);
