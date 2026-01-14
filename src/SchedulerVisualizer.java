@@ -1,10 +1,9 @@
 import javax.swing.*;
 import java.awt.*;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
-import java.util.Comparator;
-import java.util.Arrays;
 import javax.swing.table.DefaultTableModel;
+import java.util.Queue;
 
 public class SchedulerVisualizer extends JFrame {
 
@@ -84,7 +83,7 @@ public class SchedulerVisualizer extends JFrame {
         panel.add(clearButton);
 
         // Inside your createInputPanel() or as a class member
-        String[] algorithms = {"FCFS", "SJF (Non-Preemptive)", "SRTF"};
+        String[] algorithms = {"FCFS", "SJF (Non-Preemptive)", "SRTF", "Round Robin"};
         JComboBox<String> algoSelector = new JComboBox<>(algorithms);
 
         panel.add(algoSelector);
@@ -98,7 +97,10 @@ public class SchedulerVisualizer extends JFrame {
                 calculateSJF(processList);
             } else if("SRTF".equals(selected)) {
                 calculateSRTF(processList);
+            } else if("Round Robin".equals(selected)) {
+                calculateRR(processList, 3);
             }
+
             refreshUI();
         });
 
@@ -120,7 +122,9 @@ public class SchedulerVisualizer extends JFrame {
                     calculateSJF(processList);
                 } else if("SRTF".equals(selected)) {
                     calculateSRTF(processList);
-                };
+                } else if("Round Robin".equals(selected)) {
+                    calculateRR(processList, 3);
+                }
 
                 // 3. Update the Table and Gantt Chart
                 refreshUI();
@@ -334,6 +338,104 @@ public class SchedulerVisualizer extends JFrame {
                     // Add block to timeline when process finishes
                     timeline.add(new GanttBlock(p.pid, blockStart, currentTime));
                     lastPid = ""; // Reset for next potential process
+                }
+            } else {
+                // CPU is Idle
+                if (!lastPid.equals("Idle")) {
+                    if (!lastPid.equals("")) {
+                        timeline.add(new GanttBlock(lastPid, blockStart, currentTime));
+                    }
+                    blockStart = currentTime;
+                    lastPid = "Idle";
+                }
+                currentTime++;
+            }
+        }
+        currentTimeLine.clear();
+        for(GanttBlock g : timeline) {
+            if(!g.pid.equals("Idle")) {
+                currentTimeLine.add(new Process(g.pid, g.startTime, g.endTime - g.startTime));
+                currentTimeLine.get(currentTimeLine.size() - 1).completionTime = g.endTime;
+            }
+        }
+    }
+
+    public void calculateRR(List<Process> processes, int timeQuanta) {
+        List<GanttBlock> timeline = new ArrayList<>();
+        int n = processes.size();
+        int currentTime = 0;
+        int completed = 0;
+        int addedToQueue = 0;
+        String lastPid = "";
+        int blockStart = 0;
+        currentTimeLine = new ArrayList<>(processes);
+        Queue<Process> processQueue = new LinkedList<>();
+        boolean[] isAddedToQueue = new boolean[n];
+
+        // We must work on copies because we will be subtracting from remainingTime
+        for (Process p : currentTimeLine) {
+            p.remainingTime = p.burstTime;
+        }
+
+        while (completed != n) {
+
+            //context switch
+            for (int i = 0; i < n && addedToQueue < n; i++) {
+                Process p = currentTimeLine.get(i);
+                if (p.arrivalTime <= currentTime && p.remainingTime > 0) {
+
+                    if (!isAddedToQueue[i]) {
+                        isAddedToQueue[i] = true;
+                        processQueue.add(p);
+                        addedToQueue++;
+                    }
+                }
+            }
+
+            if (!processQueue.isEmpty()) {
+                Process p = processQueue.poll();
+
+                // Check for Context Switch: Did a new process take over?
+                if (!p.pid.equals(lastPid)) {
+                    if (!lastPid.equals("")) {
+                        timeline.add(new GanttBlock(lastPid, blockStart, currentTime));
+                    }
+                    blockStart = currentTime;
+                    lastPid = p.pid;
+                }
+
+                int newRemianingTime = Math.max(0, p.remainingTime - timeQuanta);
+                currentTime += Math.min(timeQuanta, p.remainingTime - newRemianingTime);
+                p.remainingTime = newRemianingTime;
+
+                if (p.remainingTime == 0) {
+                    for(Process pp : processList){
+                        if(pp.pid.equals(p.pid)){
+                            pp.completionTime = currentTime;
+                            pp.turnAroundTime = p.completionTime - p.arrivalTime;
+                            pp.waitingTime = p.turnAroundTime - p.burstTime;
+                        }
+                    }
+
+                    completed++;
+
+                    // Add block to timeline when process finishes
+                    timeline.add(new GanttBlock(p.pid, blockStart, currentTime));
+                    lastPid = ""; // Reset for next potential process
+                }else{
+                    //check for context switch
+                    for (int i = 0; i < n && addedToQueue < n; i++) {
+                        Process q = currentTimeLine.get(i);
+                        if (q.arrivalTime <= currentTime && q.remainingTime > 0) {
+
+                            if (!isAddedToQueue[i]) {
+                                isAddedToQueue[i] = true;
+                                processQueue.add(q);
+                                addedToQueue++;
+                            }
+                        }
+                    }
+                    processQueue.add(p);
                 }
             } else {
                 // CPU is Idle
