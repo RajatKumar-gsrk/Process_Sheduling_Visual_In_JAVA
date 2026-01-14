@@ -60,6 +60,7 @@ public class SchedulerVisualizer extends JFrame {
 
     private JPanel createInputPanel() {
         JPanel panel = new JPanel();
+        panel.setPreferredSize(new Dimension(300, 600 - 150));
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(BorderFactory.createTitledBorder("Add Process"));
 
@@ -74,6 +75,22 @@ public class SchedulerVisualizer extends JFrame {
         panel.add(arrivalField);
         panel.add(new JLabel("Burst Time:"));
         panel.add(burstField);
+
+        // Create a slider: Min 1, Max 10, Initial 2
+        JSlider quantumSlider = new JSlider(JSlider.HORIZONTAL, 1, 10, 2);
+        quantumSlider.setMajorTickSpacing(1);
+        quantumSlider.setPaintTicks(true);
+        quantumSlider.setPaintLabels(true);
+        // Create a label to show the current value
+        JLabel quantumValueLabel = new JLabel("Value: "+(Integer)quantumSlider.getValue());
+        // Add them to the panel
+        panel.add(new JLabel("Time Quantum (RR):"));
+        quantumSlider.setSnapToTicks(true);
+        // Sub-panel for better alignment
+        JPanel sliderGroup = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        sliderGroup.add(quantumSlider);
+        sliderGroup.add(quantumValueLabel);
+        panel.add(sliderGroup);
 
         JButton addButton = new JButton("Add Process");
         JButton clearButton = new JButton("Clear All");
@@ -98,13 +115,24 @@ public class SchedulerVisualizer extends JFrame {
             } else if("SRTF".equals(selected)) {
                 calculateSRTF(processList);
             } else if("Round Robin".equals(selected)) {
-                calculateRR(processList, 3);
+                calculateRR(processList, (Integer) quantumSlider.getValue());
             }
 
             refreshUI();
         });
 
         // --- The Logic for add button ---
+
+        quantumSlider.addChangeListener(e -> {
+            quantumValueLabel.setText("Value: " + quantumSlider.getValue());
+
+            // Only re-calculate if we are currently in Round Robin mode
+            if ("Round Robin".equals((String)algoSelector.getSelectedItem())) {
+                calculateRR(processList, quantumSlider.getValue());
+                refreshUI();
+            }
+        });
+
         addButton.addActionListener(e -> {
             try {
                 String pid = pidField.getText();
@@ -123,7 +151,7 @@ public class SchedulerVisualizer extends JFrame {
                 } else if("SRTF".equals(selected)) {
                     calculateSRTF(processList);
                 } else if("Round Robin".equals(selected)) {
-                    calculateRR(processList, 3);
+                    calculateRR(processList, (Integer)quantumSlider.getValue());
                 }
 
                 // 3. Update the Table and Gantt Chart
