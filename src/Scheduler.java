@@ -68,11 +68,11 @@ public class Scheduler {
             // It will finish at 'currentTime + burstTime' as it's non-preemptive.
 
             p.completionTime = currentTime + p.burstTime;
-            p.turnaroundTime = p.completionTime - p.arrivalTime;
-            p.waitingTime = p.turnaroundTime - p.burstTime;
+            p.turnAroundTime = p.completionTime - p.arrivalTime;
+            p.waitingTime = p.turnAroundTime - p.burstTime;
 
             // Update totals
-            totalTurnaroundTime += p.turnaroundTime;
+            totalTurnaroundTime += p.turnAroundTime;
             totalWaitingTime += p.waitingTime;
 
             // visual Gantt chart
@@ -89,7 +89,7 @@ public class Scheduler {
         for (Process p : processes) {
             System.out.printf("%-5s %-10d %-10d %-12d %-12d %-10d\n",
                     p.pid, p.arrivalTime, p.burstTime,
-                    p.completionTime, p.turnaroundTime, p.waitingTime);
+                    p.completionTime, p.turnAroundTime, p.waitingTime);
         }
 
         // --- 5. Calculate and Display Averages ---
